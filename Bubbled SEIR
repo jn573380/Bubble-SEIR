@@ -1,37 +1,33 @@
-library(data.table)
-library(dplyr,warn.conflicts = F)
-
-SEIR = function(S,E,I,R,beta,kappa,gamma,r,k) {
+Bubbled_SEIR = function(S,E,I,R,beta,kappa,gamma,r,k) {
   Sm = S
   Em = E
   Im = I
   Rm = R
-  pop = rep(1:k, each = (3+4*k))
-  pop.to = rep(c(0,0,0,rep(1:k, each = 4)), k)
-  event = rep(c("SE", "EI", "IR",rep(c("S", "E", "I", "R"),k)), k)
-  TT = 0
+  pop = rep(1:k, each = (3+4*k)) #population that individual comes from
+  pop.to = rep(c(0,0,0,rep(1:k, each = 4)), k) #population that individual moves to
+# list all events that may occur, three transmissions within bubble and four movements between bubbles.
+  event = rep(c("SE", "EI", "IR",rep(c("S", "E", "I", "R"),k)), k) 
+  TT = 0   #total time
   time = c(0)
-  #N = S+E+I+R
-  C = rep(0,k)
+  C = rep(0,k) # cumulate count how many infections in epidemic
   Cm = C
-  while((sum(E)+sum(I))!=0) {
-    N = S+E+I+R
-    q = matrix(0, nrow = k, ncol = (3+4*k), byrow=T)
-    q[,1] = beta*S*I/N
-    q[,2] = kappa*E
-    q[,3] = gamma*I
+  while((sum(E)+sum(I))!=0) {  #epidemic will end when there is no more exposed indiviual and infected individual
+    N = S+E+I+R  # population size in total 
+    q = matrix(0, nrow = k, ncol = (3+4*k), byrow=T)  #create rate matrix
+    q[,1] = beta*S*I/N   
+    q[,2] = kappa*E   
+    q[,3] = gamma*I  
     for(i in 1:k) {
-    q[i,4:dim(q)[2]] = rep(c((S[i]*r[i])/(k-1), (E[i]*r[i])/(k-1), (I[i]*r[i])/(k-1), (R[i]*r[i])/(k-1)), k)
-      q[i,(3+(i-1)*4+1):(3+4*i)] = 0
+    q[i,4:dim(q)[2]] = rep(c((S[i]*r[i])/(k-1), (E[i]*r[i])/(k-1), (I[i]*r[i])/(k-1), (R[i]*r[i])/(k-1)), k) 
+      q[i,(3+(i-1)*4+1):(3+4*i)] = 0 
     }
     q = c(t(q))
-    #print(q)
     if (sum(q)<=0.0){
       break
     }
-    y = sample(1:((3+4*k)*k), size = 1, prob = q)
-    t = rexp(1, rate = sum(q))
-    if (pop.to[y] == 0) {
+    y = sample(1:((3+4*k)*k), size = 1, prob = q/sum(q)) #sample one event with probability q/sum(q)
+    t = rexp(1, rate = sum(q)) #sample time point from exponential distribution with parameter sum(q)
+    if (pop.to[y] == 0) { #record the current number of individual in S,E,I,R when the sample event is a transmission within bubble
       if(event[y] == "SE") {
         S[pop[y]] = S[pop[y]]-1
         E[pop[y]] = E[pop[y]]+1
@@ -48,7 +44,7 @@ SEIR = function(S,E,I,R,beta,kappa,gamma,r,k) {
         
       }
     }
-    if (pop.to[y] > 0) {
+    if (pop.to[y] > 0) { #record the current number of individual in S,E,I,R when the sample event is a movement between bubbles
       if(event[y] == "S") {
         S[pop[y]] = S[pop[y]]-1
         S[pop.to[y]] = S[pop.to[y]]+1
@@ -68,7 +64,7 @@ SEIR = function(S,E,I,R,beta,kappa,gamma,r,k) {
         R[pop.to[y]] = R[pop.to[y]]+1
       }
     }
-    TT = TT+t
+    TT = TT+t 
     time = c(time,TT)
     Sm = rbind(Sm,S)
     Em = rbind(Em,E)
@@ -87,22 +83,22 @@ data = function(k,beta,kappa,gamma,r,S0,E0,I0,R0,N,Nsim){
   dur = c()
   durk = c()
   for(i in 1:Nsim){
-    numberk= SEIR(rep(S0,k),rep(E0,k),rep(I0,k),rep(R0,k),rep(beta,k),rep(kappa,k),rep(gamma,k),rep(r,k),k)
-    number = SEIR(S0*k,E0*k,I0*k,R0*k,beta,kappa,gamma,r,1)
+    numberk= Bubbled_SEIR(rep(S0,k),rep(E0,k),rep(I0,k),rep(R0,k),rep(beta,k),rep(kappa,k),rep(gamma,k),rep(r,k),k) #simulated data with k bubbles
+    number = Bubbled_SEIR(S0*k,E0*k,I0*k,R0*k,beta,kappa,gamma,r,1) #simulated data without bubble
     Sday = c()
     Eday = c()
     Iday = c()
     Rday = c()
     Cday = c()
-    `%!in%` <- Negate(`%in%`)
+    `%!in%` <- Negate(`%in%`) # helper function to find elements not in a set
     for(j in 1:length(number$time)){
-      day = c(0:ceiling(number$time)[length(ceiling(number$time))])
-      Sday[ceiling(number$time)[j]+1] = number$S[j]
+      day = c(0:ceiling(number$time)[length(ceiling(number$time))]) #convert time point to days
+      Sday[ceiling(number$time)[j]+1] = number$S[j] 
       Eday[ceiling(number$time)[j]+1] = number$E[j]
       Iday[ceiling(number$time)[j]+1] = number$I[j]
       Rday[ceiling(number$time)[j]+1] = number$R[j]
       Cday[ceiling(number$time)[j]+1] = number$C[j]+(I0*k)
-      for(d in day){
+      for(d in day){ # fill missing days with the previous day's values
         if(d %!in% ceiling(number$time)){
           Cday[d+1] = Cday[d]
           Iday[d+1] = Iday[d]
@@ -112,12 +108,14 @@ data = function(k,beta,kappa,gamma,r,S0,E0,I0,R0,N,Nsim){
         }
       }
     }
+#record final cumulative cases and epidemic duration
     count[i] = tail(Cday,1)
     group = rep(1,length(Cday))
     sim = rep(i,length(Cday))
     dur[i] = tail(day,1)
     df1 = data.frame(day,Sday,Eday,Iday,Rday,Cday,group,sim)
-    
+
+#repeat for the population with k bubbles
     Sdayk = c()
     Edayk = c()
     Idayk = c()
@@ -147,7 +145,8 @@ data = function(k,beta,kappa,gamma,r,S0,E0,I0,R0,N,Nsim){
     dfk = data.frame(dayk,Sdayk,Edayk,Idayk,Rdayk,Cdayk,groupk,simk)
     colnames(dfk) = c("day","Sday","Eday","Iday","Rday","Cday","group","sim")
     df[[i]] = rbind(df1,dfk)
-    
+
+#save the raw data as backup
     a=c()
     for(m in 1:k){
       b=cbind(numberk$S[,m],numberk$E[,m],numberk$I[,m],numberk$R[,m],numberk$C[,m])
