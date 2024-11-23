@@ -1,4 +1,4 @@
-organozed_data = function(k,beta,kappa,gamma,r,S0,E0,I0,R0,N,Nsim){
+organized_data = function(k,beta,kappa,gamma,r,S0,E0,I0,R0,N,Nsim){
   df = list()
   dfsep = list()
   count = c()
